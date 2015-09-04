@@ -1,0 +1,588 @@
+@{
+    ViewBag.Title = "Description";
+    Layout = "~/Views/Shared/_ChipinDashboardLayout.cshtml";
+}
+<!--=================================== START PAGE HEADER ================================================-->
+<!-- Start page header -->
+<div class="header-content">
+    <h2><i class="fa fa-envelope"></i>Calendar <span>Blackout Dates &amp; Manage Fundraisers</span></h2>
+    <div class="breadcrumb-wrapper hidden-xs">
+        <span class="label">You are here:</span>
+        <ol class="breadcrumb">
+            <li class="active">Calendar</li>
+        </ol>
+    </div>
+</div><!-- /.header-content -->
+<!--================================== End page header ===================================================-->
+<div class="container">
+
+    <div class="row" ng-controller="calendarController as vm" id="calendar" ng-cloak>
+
+        <div class="col-md-10">
+            <h2 class="text-center">{{ vm.calendarTitle }}</h2>
+
+            <div class="row">
+
+                <div class="col-md-6 text-center">
+                    <div class="btn-group">
+
+                        <button class="btn btn-primary"
+                                mwl-date-modifier
+                                date="vm.calendarDay"
+                                decrement="vm.calendarView">
+                            Previous
+                        </button>
+                        <button class="btn btn-default"
+                                mwl-date-modifier
+                                date="vm.calendarDay"
+                                set-to-today>
+                            Today
+                        </button>
+                        <button class="btn btn-primary"
+                                mwl-date-modifier
+                                date="vm.calendarDay"
+                                increment="vm.calendarView">
+                            Next
+                        </button>
+                    </div>
+                </div>
+
+                <br class="visible-xs visible-sm">
+
+                <div class="col-md-6 text-center">
+                    <div class="btn-group">
+                        <label class="btn btn-primary" ng-model="vm.calendarView" btn-radio="'year'">Year</label>
+                        <label class="btn btn-primary" ng-model="vm.calendarView" btn-radio="'month'">Month</label>
+                        <label class="btn btn-primary" ng-model="vm.calendarView" btn-radio="'week'">Week</label>
+                        <label class="btn btn-primary" ng-model="vm.calendarView" btn-radio="'day'">Day</label>
+                    </div>
+                </div>
+
+            </div>
+
+            <br>
+
+            <mwl-calendar events="vm.events"
+                          view="vm.calendarView"
+                          view-title="vm.calendarTitle"
+                          current-day="vm.calendarDay"
+                          on-event-click="vm.eventClicked(calendarEvent)"
+                          on-event-times-changed="vm.eventTimesChanged(calendarEvent); calendarEvent.startsAt = calendarNewEventStart; calendarEvent.endsAt = calendarNewEventEnd"
+                          edit-event-html="'<i class=\'glyphicon glyphicon-pencil\'></i>'"
+            delete-event-html="'<i class=\'glyphicon glyphicon-remove\'></i>'"
+            on-edit-event-click="vm.eventEdited(calendarEvent)"
+            on-delete-event-click="vm.eventDeleted(calendarEvent)"
+            auto-open="true"
+            day-view-start="06:00"
+            day-view-end="22:00"
+            day-view-split="30"
+            cell-modifier="vm.modifyCell(calendarCell)">
+          </mwl-calendar>
+
+            <br><br><br>
+
+            <script type="text/ng-template" id="modalContent.html" ng-clock>
+                <div class="modal-header">
+                    <h3 class="modal-title">Add/Edit Event</h3>
+                </div>@*
+                    <div class="modal-body">
+                        <p>Action: <pre>{{ vm.action }}</pre></p>
+                        <p>Event: <pre>{{ vm.event | json }}</pre></p>*@
+                <div class="modal-body">
+
+                    <table class="table table-bordered">
+
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Type</th>
+                                <th>Starts at</th>
+                                <th>Ends at</th>
+                                <th>All Day</th>
+
+                                <th>Remove</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            <tr>
+                                <td><input type="text" class="form-control" ng-model="mc.event.title"></td>
+                                <td>
+                                    <select ng-model="mc.event.type" class="form-control">
+                                        <option value="blackout">Blackout</option>
+                                        <option value="confirmed">Confirmed</option>
+                                        <option value="unconfirmed">Unconfirmed</option>
+
+                                    </select>
+                                </td>
+                                <td>
+                                    <p class="input-group" style="max-width: 250px">
+                                        <input type="text" class="form-control" datepicker-popup="medium" ng-model="mc.event.startsAt" is-open="mc.event.startOpen" close-text="Close" />
+                                        <span class="input-group-btn">
+                                            <button type="button" class="btn btn-default" ng-click="mc.toggle($event, 'startOpen', mc.event)"><i class="glyphicon glyphicon-calendar"></i></button>
+                                        </span>
+                                    </p>
+                                    <timepicker ng-model="mc.event.startsAt" hour-step="1" minute-step="15" show-meridian="true"></timepicker>
+                                </td>
+                                <td>
+                                    <p class="input-group" style="max-width: 250px">
+                                        <input type="text" class="form-control" datepicker-popup="medium" ng-model="mc.event.endsAt" is-open="mc.event.endOpen" close-text="Close" />
+                                        <span class="input-group-btn">
+                                            <button type="button" class="btn btn-default" ng-click="mc.toggle($event, 'endOpen', mc.event)"><i class="glyphicon glyphicon-calendar"></i></button>
+                                        </span>
+                                    </p>
+                                    <timepicker ng-model="mc.event.endsAt" hour-step="1" minute-step="15" show-meridian="true"></timepicker>
+                                </td>
+                                <td>
+                                    <p class="input-group">
+                                        <input type="checkbox" class="form-control" ng-model="mc.event.allDay" />
+                                </td>
+
+                                <td>
+                                    <button class="btn btn-danger" ng-click="mc.showDeletePopup(true, mc.event.uid)">Delete</button>
+                                    <div class="alert alert-block alert-error notification fade in" ng-if="mc.displayDeletePopup" ng-cloak>
+                                        <h6>Are you sure you want to delete?</h6>
+                                        <div class="form-controls-alert">
+                                            <a href="" class="btn" data-ng-click="mc.showDeletePopup(false)">No</a>
+                                            <a href="" class="btn btn-danger" data-ng-click="mc.remove()">Yes</a>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+
+                    </table>
+                </div>
+
+                <div class="modal-footer">
+                    <button class="btn btn-primary" ng-click="mc.ok()">Submit</button>
+                </div>
+
+            </script>
+
+            <h3 id="event-editor">
+                Pending events
+                <button class="btn btn-primary pull-right" ng-click="vm.eventAdd()">Add Blackout Dates</button>
+
+            </h3>
+            @*
+                <table class="table table-bordered">
+
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Type</th>
+                            <th>Starts at</th>
+                            <th>Ends at</th>
+                            <th>Remove</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr ng-repeat="event in vm.events track by $index">
+                            <td><input type="text" class="form-control" ng-model="event.title"></td>
+                            <td>
+                                <select ng-model="event.type" class="form-control">
+                                    <option value="important">Important</option>
+                                    <option value="warning">Warning</option>
+                                    <option value="info">Info</option>
+                                    <option value="inverse">Inverse</option>
+                                    <option value="success">Success</option>
+                                    <option value="special">Special</option>
+                                </select>
+                            </td>
+                            <td>
+                                <p class="input-group" style="max-width: 250px">
+                                    <input type="text" class="form-control" readonly datepicker-popup="medium" ng-model="event.startsAt" is-open="event.startOpen" close-text="Close" />
+                                    <span class="input-group-btn">
+                                        <button type="button" class="btn btn-default" ng-click="vm.toggle($event, 'startOpen', event)"><i class="glyphicon glyphicon-calendar"></i></button>
+                                    </span>
+                                </p>
+                                <timepicker ng-model="event.startsAt" hour-step="1" minute-step="15" show-meridian="true"></timepicker>
+                            </td>
+                            <td>
+                                <p class="input-group" style="max-width: 250px">
+                                    <input type="text" class="form-control" readonly datepicker-popup="medium" ng-model="event.endsAt" is-open="event.endOpen" close-text="Close" />
+                                    <span class="input-group-btn">
+                                        <button type="button" class="btn btn-default" ng-click="vm.toggle($event, 'endOpen', event)"><i class="glyphicon glyphicon-calendar"></i></button>
+                                    </span>
+                                </p>
+                                <timepicker ng-model="event.endsAt" hour-step="1" minute-step="15" show-meridian="true"></timepicker>
+                            </td>
+                            <td><button class="btn btn-danger" ng-click="vm.events.splice($index, 1)">Delete</button></td>
+                        </tr>
+                    </tbody>
+
+                </table>
+            *@
+
+            <div class="row">
+                <div class="well">
+
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Date Start</th>
+                                <th>Date End</th>
+                                <th>Event Title</th>
+                                <th>Number of Guests</th>
+                                <th>Contribution</th>
+                                <th>Confirmed</th>
+
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr ng-repeat="events in vm.events | orderBy: 'startsAt' track by $index" class="text-center" ng-if="events.title!='Blackout'">
+                                <td>{{events.startsAt | date:'MM/dd/yy h:mma'}}</td>
+                                <td>{{events.endsAt | date:'MM/dd/yy h:mma'}}</td>
+                                <td>{{events.title}}</td>
+                                <td>{{events.guests}}</td>
+                                <td>{{events.contribution}}%</td>
+                                <td>
+                                    <span ng-if="events.confirm===true">Yes</span><span><a href="#" ng-if="events.confirm===false" ng-click="vm.confirm(events.uid, events.organizationId)">Confirm</a></span>
+                                    <span ng-if="events.confirm===false"> /</span>
+                                    <span><a href="#" ng-if="events.confirm===false" ng-click="vm.eventDeleted(events)">Deny</a></span>
+                                </td>
+
+                            </tr>
+
+                        </tbody>
+                    </table>
+
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+    @section Scripts {
+        <script src="~/Scripts/sabio.services.merchant.js"></script>
+
+
+        <script>
+            sabio.services.merchant.merchantFactory = function ($baseService) {
+                var aMerchantObject = sabio.services.merchant;
+                var newCalendarService = $.extend(true, {}, aMerchantObject, $baseService);
+                return newCalendarService;
+            };
+
+            sabio.ng.addService(sabio.ng.app.module
+                        , "$merchantService"
+                        , ["$baseService"]
+                        , sabio.services.merchant.merchantFactory);
+
+            sabio.services.merchant.calendarControllerFactory = function ($scope, $baseController, $merchantService, $modal, moment) {
+
+                var vm = this;
+                
+                //These variables MUST be set as a minimum for the calendar to work
+                vm.calendarView = 'month';
+                vm.calendarDay = new Date();
+                $.extend(vm, $baseController);
+
+                vm.$merchantService = $merchantService;
+                vm.notify = vm.$merchantService.getNotifier($scope);
+
+                vm.render = _render;
+                vm.receivedItems = _receivedItems;
+                vm.onSuccess = _onSuccess;
+                vm.onError = _onError;
+                vm.confirm = _confirm;
+                vm.deleteData = {};
+
+                vm.events = [
+                  //{
+                  //    title: 'An event',
+                  //    type: 'warning',
+                  //    startsAt: moment().startOf('week').subtract(2, 'days').add(8, 'hours').toDate(),
+                  //    endsAt: moment().startOf('week').add(1, 'week').add(9, 'hours').toDate(),
+                  //    draggable: true,
+                  //    resizable: true
+                  //}, {
+                  //    title: '<i class="glyphicon glyphicon-asterisk"></i> <span class="text-primary">Another event</span>, with a <i>html</i> title',
+                  //    type: 'info',
+                  //    startsAt: moment().subtract(1, 'day').toDate(),
+                  //    endsAt: moment().add(5, 'days').toDate(),
+                  //    draggable: true,
+                  //    resizable: true
+                  //}, {
+                  //    title: 'This is a really long event title that occurs on every year',
+                  //    type: 'important',
+                  //    startsAt: moment().startOf('day').add(7, 'hours').toDate(),
+                  //    endsAt: moment().startOf('day').add(19, 'hours').toDate(),
+                  //    recursOn: 'year',
+                  //    draggable: true,
+                  //    resizable: true
+                  //}
+                ];
+
+                function _render() {
+                    vm.$merchantService.getEvents(vm.receivedItems, vm.onError);
+                }
+                vm.render();
+
+                function _onSuccess(data) {
+                    console.log("Success", data.item);
+                    vm.events = [];
+                    vm.render();
+
+                }
+
+                function _onError(data) {
+                    console.log("Error", data.items);
+                }
+
+                function _receivedItems(data) {
+                    console.log("from db", data.items);
+                    var eventList = [];
+                    for (var i = 0; i < data.items.length; i++) {
+                        if (data.items[i].className === 'Blackout') {
+                            eventList.push({
+                                title: data.items[i].title,
+                                startsAt: new Date(data.items[i].start),
+                                endsAt: new Date(data.items[i].end),
+                                className: data.items[i].className,
+                                contribution: data.items[i].contribution,
+                                confirm: data.items[i].confirm,
+                                type: 'blackout',
+                                editable: true,
+                                uid: data.items[i].uid,
+                                contactName: data.items[i].contactName,
+                                location: data.items[i].location,
+                                allDay: data.items[i].allDay,
+                                guests: data.items[i].guests,
+                                organizationId: data.items[i].organizationId
+                            });
+
+                        }
+                        else if (data.items[i].confirm === false) {
+                            eventList.push({
+                                title: data.items[i].title,
+                                startsAt: new Date(data.items[i].start),
+                                endsAt: new Date(data.items[i].end),
+                                className: data.items[i].className,
+                                contribution: data.items[i].contribution,
+                                confirm: data.items[i].confirm,
+                                type: 'unconfirmed',
+                                editable: true,
+                                uid: data.items[i].uid,
+                                contactName: data.items[i].contactName,
+                                location: data.items[i].location,
+                                allDay: data.items[i].allDay,
+                                guests: data.items[i].guests,
+                                organizationId: data.items[i].organizationId
+                            });
+
+                        }
+                        else {
+                            eventList.push({
+                                title: data.items[i].title,
+                                startsAt: new Date(data.items[i].start),
+                                endsAt: new Date(data.items[i].end),
+                                className: data.items[i].className,
+                                contribution: data.items[i].contribution,
+                                confirm: data.items[i].confirm,
+                                type: 'confirmed',
+                                editable: true,
+                                uid: data.items[i].uid,
+                                contactName: data.items[i].contactName,
+                                location: data.items[i].location,
+                                allDay: data.items[i].allDay,
+                                guests: data.items[i].guests,
+                                organizationId: data.items[i].organizationId
+                            });
+                        }
+                    };
+
+                    vm.notify(function () {
+                        vm.events = eventList;
+                        
+                        console.log("after notify", vm.events);
+                    });
+                }
+
+                function _confirm(uid, organizationId) {
+                    vm.confirmData = {};
+                    vm.confirmData.uid = uid;
+                    vm.confirmData.organizationId = organizationId;
+                    vm.$merchantService.confirmEvent(vm.confirmData, vm.onSuccess, vm.onError);
+                }
+
+                function showModal(action, event) {
+                    $modal.open({
+                        templateUrl: 'modalContent.html',
+                        controller: function () {
+                            var vm = this;
+                            vm.action = action;
+                            vm.event = event;
+                        },
+                        controllerAs: 'vm',
+                        size: 'lg'
+                    });
+
+                    
+                }
+
+                vm.eventClicked = function (event) {
+                    //showModal('Clicked', event);
+                    console.log(event);
+                    vm.openModal(event);
+                };
+
+                vm.eventEdited = function (event) {
+                    //showModal('Edited', event);
+                    vm.openModal(event);
+                };
+
+                vm.eventDeleted = function (event) {
+                    vm.deleteData.uid = event.uid;
+                    vm.$merchantService.deleteEvents(vm.deleteData, vm.onSuccess, vm.onError);
+                };
+
+                vm.eventTimesChanged = function (event) {
+                    //showModal('Dropped or resized', event);
+                };
+                vm.eventAdd = function () {
+                    //vm.events.push({ title: 'Blackout', type: 'important', draggable: true, resizable: true })
+                    event = {};
+                    event = {
+                        title: 'Blackout',
+                        type: 'blackout',
+                        allDay: true
+                    };
+                    vm.openModal(event);
+                };
+
+                vm.toggle = function ($event, field, event) {
+                    $event.preventDefault();
+                    $event.stopPropagation();
+                    event[field] = !event[field];
+                };
+
+                 
+
+                vm.openModal = function (event) {
+                    console.log(event);
+                    var modalInstance = $modal.open({
+
+                        templateUrl: 'modalContent.html',
+                        controller: 'modalController as mc',
+                        size: 'lg',
+                        resolve: {
+                            items: function () {
+                                vm.event = event;
+                                return vm.event;
+
+                            }
+                        }
+                    });
+
+                    modalInstance.result.then(function (event) {
+                        if (event.type === 'confirmed') {
+                            event.confirm = true;
+                        }
+                        else if (event.type === 'unconfirmed') {
+                            event.confirm = false;
+                        }
+                        
+                        if (event.uid != null && event.uid.length > 0) {
+                            
+                            event.endDateTime = JSON.stringify(event.endsAt).replace(/""/g, '');
+                            event.startDateTime = JSON.stringify(event.startsAt).replace(/""/g, '');
+                                                        
+                                                                                   
+                            console.log(event);
+                            vm.$merchantService.updateEvent(event, vm.onSuccess, vm.onError);
+                        }
+                        else {
+                            event.startDateTime = JSON.stringify(event.startsAt);
+                            event.endDateTime = JSON.stringify(event.endsAt);
+                            vm.$merchantService.insertEvent(event, vm.onSuccess, vm.onError);
+                        }
+                    }, function (close) {
+                        console.log(close);
+                        if (close === 'delete') {
+                            vm.events = [];
+                            vm.render();
+                            
+                        }
+                        console.log('Modal dismissed at: ' + new Date());
+                    });
+                };
+            };
+
+            sabio.services.merchant.modalControllerFactory = function (
+                    $scope
+                    , $baseController
+                    , $modalInstance
+                    , items
+                    , $merchantService) {
+                var vm = this;
+
+                $.extend(vm, $baseController);
+
+                vm.$scope = $scope;
+                vm.$modalInstance = $modalInstance;
+                vm.$merchantService = $merchantService;
+                vm.event = items;
+                vm.ok = _ok;
+                vm.showDeletePopup = _showDeletePopup;
+                vm.displayDeletePopup = false;
+
+                vm.toggle = function ($event, field, event) {
+                    $event.preventDefault();
+                    $event.stopPropagation();
+                    event[field] = !event[field];
+                };
+
+                function _ok() {
+                    vm.$modalInstance.close(vm.event);
+                };
+
+                
+                
+                vm.remove = _remove;
+                vm.deleteData = {};
+                vm.onSuccess = _onSuccess;
+                vm.onError = _onError;
+
+                function _onSuccess() {
+                   
+                }
+
+                function _onError(data) {
+                    console.log("Error", data.items);
+                }
+                function _showDeletePopup(options, uid) {
+                    if (options === true) {
+                        vm.displayDeletePopup = true;
+                    } else {
+                        vm.displayDeletePopup = false;
+                    }
+                    console.log(uid);
+
+                    vm.deleteData.uid = uid;
+
+                };
+
+                function _remove() {
+                    vm.displayDeletePopup = false;
+                    vm.$merchantService.deleteEvents(vm.deleteData, vm.onSuccess, vm.onError);
+                    vm.$modalInstance.dismiss('delete');
+                };
+            }
+
+            sabio.ng.addController(sabio.ng.app.module
+                , "modalController"
+                , ['$scope', '$baseController', '$modalInstance', 'items', '$merchantService']
+                , sabio.services.merchant.modalControllerFactory);
+
+
+            sabio.ng.addController(sabio.ng.app.module
+                            , "calendarController"
+                            , ['$scope', '$baseController', '$merchantService','$modal', 'moment']
+                            , sabio.services.merchant.calendarControllerFactory);
+
+
+        </script>
+    }
