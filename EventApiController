@@ -1,0 +1,273 @@
+using Sabio.Web.Models;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Web.Http;
+using Sabio.Web.Services;
+using Sabio.Web.Models.Responses;
+using Sabio.Web.Domain;
+using Sabio.Web.Models.Requests;
+using Sabio.Web.Enums;
+using System.IO;
+using System.Web;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
+using Sabio.Web.Services.Interfaces;
+
+namespace Sabio.Web.Controllers.Api
+{
+    [RoutePrefix("api/events")]
+    public class EventsApiController : BaseApiController
+    {         
+        private IMerchantService _merchantService;
+    //  create a private property to attach the service when it is injected - just like angular
+        private IEventService _eventService;
+        private IOrganizationsService _organizationsService;
+        private IMessagingService _messagingService;
+        private ILocationService _locationService;
+
+    //  we tell Unity to give us an instance of IRequestTokenService by putting it here in the constructor signature
+    //  Unity knows which service to give us (in this case RequestTokenService) because we tell it in App_Start/UnityConfig.cs
+        public EventsApiController(IEventService eventService, IMerchantService MerchantService, IOrganizationsService organizationsService, IMessagingService MessagingService, ILocationService locationService)
+        {
+            _eventService = eventService;
+            _merchantService = MerchantService;
+            _organizationsService = organizationsService;
+            _messagingService = MessagingService;
+            _locationService = locationService;
+        }
+
+    
+        [Route("merchant"), Authorize, HttpPost]
+        public HttpResponseMessage Create(MerchantCalendar model)
+        {
+            if (model == null) 
+            {
+                return Request.CreateResponse(HttpStatusCode.BadRequest, model);
+            }
+            else
+            {
+                Guid newUid = _eventService.GetDate(model.StartDateTime, model.EndDateTime);                
+                ItemResponse<Guid> responseModel = new ItemResponse<Guid>();
+                responseModel.Item = newUid;
+                return Request.CreateResponse(HttpStatusCode.OK, responseModel);
+            }
+        }
+
+        [Route("merchant"), Authorize, HttpGet]
+        public HttpResponseMessage Get()
+        {
+            Merchant currentUserId = _merchantService.GetMerchantByUserId(UserService.GetCurrentUserId());
+
+            List<Events> merchantEvents = _eventService.GetMerchantEvents(currentUserId.Id);
+            ItemsResponse<Events> responseModel = new ItemsResponse<Events>();
+            responseModel.Items = merchantEvents;
+            return Request.CreateResponse(HttpStatusCode.OK, responseModel);
+        }
+        
+        [Route("merchant/confirmed/{merchantId:int}"), HttpGet]
+        public HttpResponseMessage GetConfirmedMerchantEvents(int merchantId)
+        {
+            List<EventDetails> merchantConfirmedEvents = _eventService.GetConfirmedMerchantEvents(merchantId);
+            ItemsResponse<EventDetails> responseModel = new ItemsResponse<EventDetails>();
+            if (merchantConfirmedEvents != null)
+            {
+                responseModel.Items = merchantConfirmedEvents;
+                return Request.CreateResponse(HttpStatusCode.OK, responseModel);
+            }
+            else
+            {
+                ErrorResponse noEvents = new ErrorResponse("We couldn't find any events. Check the name and try again.");
+                return Request.CreateResponse(HttpStatusCode.BadRequest, noEvents);
+            }
+        }
+
+        [Route("merchant/local"), HttpGet]
+        public HttpResponseMessage GetLocalEvents([FromUri] LocationSearchRequest model)
+        {
+
+            if (model == null)
+            {
+                return Request.CreateResponse(HttpStatusCode.BadRequest, model);
+            }
+            else
+            {
+                string modelString = model.ZipCode;
+                //search by zip
+                if (modelString.Length <= 5 && modelString.All(char.IsDigit))
+                {
+                    Location coordinates = _locationService.GetLatLngZip(modelString);
+                    List<EventDetails> confirmedLocalEvents = _eventService.ListLocalEvents(coordinates);
+                    ItemsResponse<EventDetails> responseModel = new ItemsResponse<EventDetails>();
+
+                    if (confirmedLocalEvents != null)
+                    {
+                        responseModel.Items = confirmedLocalEvents;
+                        return Request.CreateResponse(HttpStatusCode.OK, responseModel);
+                    }
+                    else
+                    {
+                        ErrorResponse noEvents = new ErrorResponse("We couldn't find any events within a 25 miles radius. Check the zip code and try again.");
+                        return Request.CreateResponse(HttpStatusCode.BadRequest, noEvents);
+                    }
+                }
+                else
+                {
+                    ErrorResponse badInput = new ErrorResponse("Invalid zip code. Try again.");
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, badInput);
+                }
+
+            }
+        }
+
+        [Route("org"), Authorize, HttpPost]
+        public HttpResponseMessage CreateRequest(MerchantCalendar model)
+        {
+            if (model == null)
+            {
+                return Request.CreateResponse(HttpStatusCode.BadRequest, model);
+            }
+            else
+            {
+                model.Start = JsonConvert.DeserializeObject<DateTimeOffset>(model.StartDateTime, new IsoDateTimeConverter());
+                model.End = JsonConvert.DeserializeObject<DateTimeOffset>(model.EndDateTime, new IsoDateTimeConverter());
+                var currentOrg = _organizationsService.GetOrganizationByUserId(UserService.GetCurrentUserId());
+                model.OrganizationId = currentOrg.Id;
+                model.ContactName = currentOrg.ContactName;
+                if(_eventService.IsAvailable(model))
+                {
+                    Guid newUid = _eventService.InsertOrgEvent(model);
+                //ItemResponse<CalendarRequestModel> responseModel = new ItemResponse<CalendarRequestModel>();
+                    Merchant currentMer = _merchantService.GetMerchantById(model.MerchantId);
+                    _messagingService.SendEventRequestEmail(currentOrg, model, currentMer);
+                ItemResponse<Guid> responseModel = new ItemResponse<Guid>();
+                responseModel.Item = newUid;
+                return Request.CreateResponse(HttpStatusCode.OK, responseModel);
+            }
+                else
+                {
+                    ErrorResponse conflict = new ErrorResponse("Current Time is unavailable, Check the vendor's blackout dates and try again.");
+                    return Request.CreateResponse(HttpStatusCode.BadRequest, conflict);
+                }
+            }
+        }
+
+        [Route("org"), Authorize, HttpGet]
+        public HttpResponseMessage GetEventByCurrentOrg()
+        {
+            var currentUser = UserService.GetCurrentUserId();
+            
+
+            ItemsResponse<Events> userMerchantEvents = new ItemsResponse<Events>();
+            userMerchantEvents.Items = _eventService.GetEventsByCurrentOrg();
+            return Request.CreateResponse(HttpStatusCode.OK, userMerchantEvents);
+        }
+        [Route("org"), Authorize, HttpPut]
+        public HttpResponseMessage UpdateRequest(MerchantCalendar model)
+        {
+            DateTimeOffset Start = JsonConvert.DeserializeObject<DateTimeOffset>(model.StartDateTime, new IsoDateTimeConverter());
+            DateTimeOffset End = JsonConvert.DeserializeObject<DateTimeOffset>(model.EndDateTime, new IsoDateTimeConverter());
+            model.Start = Start;
+            model.End = End;
+            var currentOrg = _organizationsService.GetOrganizationByUserId(UserService.GetCurrentUserId());
+            model.OrganizationId = currentOrg.Id;
+            model.ContactName = currentOrg.ContactName;
+
+            if (_eventService.IsAvailable(model))
+            {
+                Events comparison = _eventService.GetEvent(model.Uid);
+                var startEquality = System.DateTime.Equals(model.Start, comparison.Start); //somehow this is returning false for equal values despite ticks being equal
+                var startCompare = model.Start.CompareTo(comparison.Start);
+                var endEquality = System.DateTime.Equals(model.End, comparison.End); // see above comment
+                var endCompare = model.End.CompareTo(comparison.End);
+                if (startCompare!=0 || endCompare!=0)
+                    model.Confirm = false;
+
+                _eventService.UpdateMerchantEventRequest(model);
+                return Request.CreateResponse(HttpStatusCode.OK, true);
+            }
+            else
+            {
+                ErrorResponse conflict = new ErrorResponse("Current Time is unavailable, Check the vendor's blackout dates and try again.");
+                return Request.CreateResponse(HttpStatusCode.BadRequest, conflict);
+            }
+            
+        }
+
+        [Route("org/{orgId:int}"), HttpGet]
+        public HttpResponseMessage GetConfirmedEventsByOrgId(int orgId)
+        {
+            List<EventDetails> organizationEvents = _eventService.GetConfirmedEventsByOrgId(orgId);
+            ItemsResponse<EventDetails> responseModel = new ItemsResponse<EventDetails>();
+            responseModel.Items = organizationEvents;
+            if (organizationEvents != null)
+            {
+                return Request.CreateResponse(HttpStatusCode.OK, responseModel);
+            }else
+            {
+                ErrorResponse noEvents = new ErrorResponse("We couldn't find any events. Check the name and try again.");
+                return Request.CreateResponse(HttpStatusCode.BadRequest, noEvents);
+            }
+        }
+
+        [Route("org"), Authorize, HttpDelete]
+        public HttpResponseMessage DeleteRequest(MerchantCalendar model)
+        {
+            var currentOrg = _organizationsService.GetOrganizationByUserId(UserService.GetCurrentUserId());
+
+            _eventService.DeleteMerchantEvents(model, model.MerchantId);
+            return Request.CreateResponse(HttpStatusCode.OK, true);
+        }
+        [Route("merchant"), Authorize, HttpDelete]
+        public HttpResponseMessage Delete(MerchantCalendar model)
+        {
+            Merchant currentUserId = _merchantService.GetMerchantByUserId(UserService.GetCurrentUserId());
+
+            _eventService.DeleteMerchantEvents(model, currentUserId.Id);
+            return Request.CreateResponse(HttpStatusCode.OK, true);
+        }
+        [Route("merchant/confirm"), Authorize, HttpPut]
+        public HttpResponseMessage Confirm(MerchantCalendar model)
+        {
+            Merchant currentUserId = _merchantService.GetMerchantByUserId(UserService.GetCurrentUserId());
+            _eventService.ConfirmMerchantEvents(model, currentUserId.Id);
+            Organization org = _organizationsService.GetOrganizationById(model.OrganizationId.Value);
+            _messagingService.SendEventConfirmationEmail(org, model, currentUserId);
+            return Request.CreateResponse(HttpStatusCode.OK, true);
+        }
+        [Route("merchant"), Authorize, HttpPut]
+        public HttpResponseMessage Update(MerchantCalendar model)
+        {
+            DateTimeOffset Start = JsonConvert.DeserializeObject<DateTimeOffset>(model.StartDateTime, new IsoDateTimeConverter());
+            DateTimeOffset End = JsonConvert.DeserializeObject<DateTimeOffset>(model.EndDateTime, new IsoDateTimeConverter());
+            model.Start = Start;
+            model.End = End;
+            Merchant currentUserId = _merchantService.GetMerchantByUserId(UserService.GetCurrentUserId());
+            _eventService.UpdateMerchantEvent(model, currentUserId);
+            if (model.Confirm == true)
+            {
+                Organization org = _organizationsService.GetOrganizationById(model.OrganizationId.Value);
+                _messagingService.SendEventConfirmationEmail(org, model, currentUserId);
+            }
+            return Request.CreateResponse(HttpStatusCode.OK, true);
+        }
+        [Route("conflicts/{merchId:int}"), Authorize, HttpGet]
+        public HttpResponseMessage GetConflicts(int merchId)
+        {
+            if(merchId > 0)
+            {
+                List<Events> conflicts = _eventService.GetConflicts(merchId);
+
+                ItemsResponse<Events> result = new ItemsResponse<Events>();
+                result.Items = conflicts;
+                return Request.CreateResponse(HttpStatusCode.OK, result);
+            }
+            else
+            {
+                return Request.CreateResponse(HttpStatusCode.BadRequest, ModelState);
+            }
+        }
+    }
+}
